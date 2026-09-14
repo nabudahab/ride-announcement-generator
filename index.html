@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ride Announcement Generator</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f7ff;
+      --card: #ffffff;
+      --text: #1c2440;
+      --muted: #5f6c8a;
+      --primary: #3b6ef4;
+      --primary-dark: #2f59c4;
+      --border: #d9e1f7;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Inter", "Segoe UI", Roboto, Arial, sans-serif;
+      background: linear-gradient(160deg, #eef3ff 0%, #f8f2ff 100%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.25rem;
+    }
+
+    .card {
+      width: min(720px, 100%);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 14px 40px rgba(60, 90, 180, 0.14);
+      padding: 1.5rem;
+    }
+
+    h1 {
+      margin: 0 0 0.35rem;
+      font-size: clamp(1.45rem, 2.5vw, 1.9rem);
+    }
+
+    p {
+      margin: 0 0 1.2rem;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 0.9rem;
+    }
+
+    label {
+      font-size: 0.9rem;
+      font-weight: 600;
+      display: block;
+      margin-bottom: 0.35rem;
+    }
+
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.65rem 0.75rem;
+      font-size: 0.96rem;
+      color: var(--text);
+      background: #fff;
+    }
+
+    textarea {
+      min-height: 130px;
+      margin-top: 1rem;
+      resize: vertical;
+    }
+
+    .actions {
+      display: flex;
+      gap: 0.6rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 0.65rem 1rem;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    .primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .primary:hover { background: var(--primary-dark); }
+
+    .ghost {
+      background: #eef2ff;
+      color: #364570;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Ride Announcement Generator</h1>
+    <p>Fill in the details and generate a ready-to-share ride announcement.</p>
+
+    <div class="grid">
+      <div>
+        <label for="pace">Pace</label>
+        <input id="pace" type="text" placeholder="e.g., Casual, Moderate, Fast" />
+      </div>
+      <div>
+        <label for="location">Location</label>
+        <input id="location" type="text" placeholder="e.g., City Park Trailhead" />
+      </div>
+      <div>
+        <label for="rideDateTime">Date &amp; Time</label>
+        <input id="rideDateTime" type="datetime-local" />
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="generateBtn" class="primary" type="button">Generate Announcement</button>
+      <button id="clearBtn" class="ghost" type="button">Clear Output</button>
+    </div>
+
+    <label for="output" style="margin-top: 1rem;">Output</label>
+    <textarea id="output" placeholder="Your announcement will appear here..."></textarea>
+  </main>
+
+  <script>
+    const paceInput = document.getElementById('pace');
+    const locationInput = document.getElementById('location');
+    const rideDateTimeInput = document.getElementById('rideDateTime');
+    const output = document.getElementById('output');
+
+    function toLocalDateTimeValue(date) {
+      const local = new Date(date);
+      local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+      return local.toISOString().slice(0, 16);
+    }
+
+    function defaultToTodayAtSixPM() {
+      const now = new Date();
+      now.setHours(18, 0, 0, 0);
+      rideDateTimeInput.value = toLocalDateTimeValue(now);
+    }
+
+    function formatReadableDate(value) {
+      if (!value) return 'today at 6:00 PM';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleString([], {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+    }
+
+    function buildAnnouncementTemplate({ pace, location, dateTime }) {
+      return `🚴 Ride Announcement\n\nPace: ${pace || '[pace]'}\nLocation: ${location || '[location]'}\nDate & Time: ${formatReadableDate(dateTime)}\n\nJoin us for a great ride! Please arrive 10 minutes early and bring lights, helmet, and water.`;
+    }
+
+    document.getElementById('generateBtn').addEventListener('click', () => {
+      output.value = buildAnnouncementTemplate({
+        pace: paceInput.value.trim(),
+        location: locationInput.value.trim(),
+        dateTime: rideDateTimeInput.value
+      });
+    });
+
+    document.getElementById('clearBtn').addEventListener('click', () => {
+      output.value = '';
+    });
+
+    defaultToTodayAtSixPM();
+  </script>
+</body>
+</html>
