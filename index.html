@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -16,7 +17,9 @@
       --border: #d9e1f7;
     }
 
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
 
     body {
       margin: 0;
@@ -55,6 +58,28 @@
       gap: 0.9rem;
     }
 
+    .ride-rows {
+      display: grid;
+      gap: 0.65rem;
+    }
+
+    .ride-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 0.65rem;
+      align-items: end;
+    }
+
+    .ride-row input {
+      margin-top: 0.25rem;
+    }
+
+    .hint {
+      margin: 0.35rem 0 0;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
     label {
       font-size: 0.9rem;
       font-weight: 600;
@@ -62,7 +87,8 @@
       margin-bottom: 0.35rem;
     }
 
-    input, textarea {
+    input,
+    textarea {
       width: 100%;
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -99,14 +125,39 @@
       color: #fff;
     }
 
-    .primary:hover { background: var(--primary-dark); }
+    .primary:hover {
+      background: var(--primary-dark);
+    }
 
     .ghost {
       background: #eef2ff;
       color: #364570;
     }
+
+    .field-group-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 0.9rem;
+      grid-column: 1 / -1;
+    }
+
+    .option-row {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      margin-top: 0.9rem;
+      font-size: 0.92rem;
+      font-weight: 600;
+    }
+
+    .option-row input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+      accent-color: var(--primary);
+    }
   </style>
 </head>
+
 <body>
   <main class="card">
     <h1>Ride Announcement Generator</h1>
@@ -114,21 +165,45 @@
 
     <div class="grid">
       <div>
-        <label for="pace">Pace</label>
-        <input id="pace" type="text" placeholder="e.g., Casual, Moderate, Fast" />
+        <label for="pace">Pace (comma-separated if needed)</label>
+        <input id="pace" type="text" placeholder="e.g., A" />
       </div>
       <div>
-        <label for="location">Location</label>
-        <input id="location" type="text" placeholder="e.g., City Park Trailhead" />
+        <label for="location">Location (name or lat,lon)</label>
+        <input id="location" type="text" list="locationSuggestions" placeholder="e.g., Purdue West Shopping Plaza or 40.4259,-86.9081" />
+        <datalist id="locationSuggestions">
+          <option value="Purdue West Shopping Plaza"></option>
+          <option value="West Lafayette, IN"></option>
+          <option value="Purdue University"></option>
+        </datalist>
       </div>
       <div>
         <label for="rideDateTime">Date &amp; Time</label>
         <input id="rideDateTime" type="datetime-local" />
       </div>
+      <div class="field-group-row">
+        <div>
+          <label>Ride Leaders</label>
+          <div id="leaderFields" class="ride-rows"></div>
+        </div>
+        <div>
+          <label>Routes</label>
+          <div id="routeFields" class="ride-rows"></div>
+        </div>
+      </div>
+      <div style="grid-column: 1 / -1; margin-top: -0.5rem;">
+        <p class="hint">One leader and one route box are shown for one pace. More appear automatically when you add comma-separated paces.</p>
+      </div>
     </div>
+
+    <label class="option-row" for="fullMessage">
+      <input id="fullMessage" type="checkbox" checked />
+      Generate full message (uncheck for deterministic ride details only)
+    </label>
 
     <div class="actions">
       <button id="generateBtn" class="primary" type="button">Generate Announcement</button>
+      <button id="useLocationBtn" class="ghost" type="button">Use My Location</button>
       <button id="clearBtn" class="ghost" type="button">Clear Output</button>
     </div>
 
@@ -137,10 +212,20 @@
   </main>
 
   <script>
+    const STORAGE_KEY = 'purdueCyclingRideAnnouncementStateV2';
+    const DEFAULT_LOCATION = 'Purdue West Shopping Plaza';
+    const DEFAULT_PACE = 'A';
+
     const paceInput = document.getElementById('pace');
     const locationInput = document.getElementById('location');
     const rideDateTimeInput = document.getElementById('rideDateTime');
+    const leaderFieldsContainer = document.getElementById('leaderFields');
+    const routeFieldsContainer = document.getElementById('routeFields');
     const output = document.getElementById('output');
+    const generateBtn = document.getElementById('generateBtn');
+    const useLocationBtn = document.getElementById('useLocationBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const fullMessageInput = document.getElementById('fullMessage');
 
     function toLocalDateTimeValue(date) {
       const local = new Date(date);
@@ -148,14 +233,19 @@
       return local.toISOString().slice(0, 16);
     }
 
-    function defaultToTodayAtSixPM() {
-      const now = new Date();
-      now.setHours(18, 0, 0, 0);
-      rideDateTimeInput.value = toLocalDateTimeValue(now);
+    function tomorrowAtSixPMValue() {
+      const date = new Date();
+      date.setDate(date.getDate() + 1);
+      date.setHours(18, 0, 0, 0);
+      return toLocalDateTimeValue(date);
+    }
+
+    function setTomorrowAtSixPM() {
+      rideDateTimeInput.value = tomorrowAtSixPMValue();
     }
 
     function formatReadableDate(value) {
-      if (!value) return 'today at 6:00 PM';
+      if (!value) return 'Tomorrow at 6:00 PM';
       const date = new Date(value);
       if (Number.isNaN(date.getTime())) return value;
       return date.toLocaleString([], {
@@ -167,23 +257,417 @@
       });
     }
 
-    function buildAnnouncementTemplate({ pace, location, dateTime }) {
-      return `🚴 Ride Announcement\n\nPace: ${pace || '[pace]'}\nLocation: ${location || '[location]'}\nDate & Time: ${formatReadableDate(dateTime)}\n\nJoin us for a great ride! Please arrive 10 minutes early and bring lights, helmet, and water.`;
+    function parseCommaSeparated(input) {
+      return String(input || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
     }
 
-    document.getElementById('generateBtn').addEventListener('click', () => {
-      output.value = buildAnnouncementTemplate({
-        pace: paceInput.value.trim(),
-        location: locationInput.value.trim(),
-        dateTime: rideDateTimeInput.value
-      });
-    });
+    function getFieldInputs(container) {
+      return Array.from(container.querySelectorAll('input'));
+    }
 
-    document.getElementById('clearBtn').addEventListener('click', () => {
+    function getFieldValues(container) {
+      return getFieldInputs(container).map((input) => input.value.trim());
+    }
+
+    function renderFields(container, count, values, labelPrefix, fieldPrefix, placeholderBase, singularLabel) {
+      const nextCount = Math.max(1, count || 1);
+      const existingValues = Array.isArray(values) ? values : getFieldValues(container);
+      container.innerHTML = '';
+
+      for (let i = 0; i < nextCount; i += 1) {
+        const field = document.createElement('div');
+        const label = document.createElement('label');
+        label.setAttribute('for', `${fieldPrefix}-${i}`);
+        label.textContent = nextCount === 1 ? singularLabel : `${labelPrefix} ${i + 1}`;
+
+        const input = document.createElement('input');
+        input.id = `${fieldPrefix}-${i}`;
+        input.type = 'text';
+        input.dataset.field = fieldPrefix;
+        input.placeholder = nextCount === 1
+          ? placeholderBase.single
+          : placeholderBase.multi.replace('{n}', i + 1);
+        input.value = existingValues[i] || '';
+
+        field.appendChild(label);
+        field.appendChild(input);
+        container.appendChild(field);
+      }
+    }
+
+    function syncFieldsToPaces(savedLeaders, savedRoutes) {
+      const paceCount = parseCommaSeparated(paceInput.value.trim() || DEFAULT_PACE).length || 1;
+      const leaders = savedLeaders || getFieldValues(leaderFieldsContainer);
+      const routes = savedRoutes || getFieldValues(routeFieldsContainer);
+
+      if (getFieldInputs(leaderFieldsContainer).length !== paceCount || savedLeaders) {
+        renderFields(
+          leaderFieldsContainer,
+          paceCount,
+          leaders,
+          'Ride Leader',
+          'leader',
+          { single: 'e.g., @Carson', multi: 'e.g., @Leader {n}' },
+          'Ride Leader'
+        );
+      }
+
+      if (getFieldInputs(routeFieldsContainer).length !== paceCount || savedRoutes) {
+        renderFields(
+          routeFieldsContainer,
+          paceCount,
+          routes,
+          'Route',
+          'route',
+          { single: 'e.g., Strava link', multi: 'e.g., Strava link for pace {n}' },
+          'Route'
+        );
+      }
+    }
+
+    function saveState() {
+      const state = {
+        pace: paceInput.value,
+        location: locationInput.value,
+        leaders: getFieldValues(leaderFieldsContainer),
+        routes: getFieldValues(routeFieldsContainer),
+        fullMessage: fullMessageInput.checked,
+      };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (error) {
+        console.warn('Could not save local state:', error);
+      }
+    }
+
+    function loadState() {
+      let state = null;
+      try {
+        state = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+      } catch (error) {
+        console.warn('Could not read local state:', error);
+      }
+
+      paceInput.placeholder = 'e.g., A';
+      locationInput.placeholder = DEFAULT_LOCATION;
+
+      if (!state) {
+        setTomorrowAtSixPM();
+        syncFieldsToPaces();
+        return;
+      }
+
+      paceInput.value = state.pace || '';
+      locationInput.value = state.location || '';
+
+      // Date/time is intentionally never restored from localStorage.
+      // Every page load starts at tomorrow at 6:00 PM.
+      setTomorrowAtSixPM();
+
+      syncFieldsToPaces(state.leaders || [], state.routes || []);
+      fullMessageInput.checked = state.fullMessage !== false;
       output.value = '';
+    }
+
+    function normalizeLeaderTag(name) {
+      const trimmed = String(name || '').trim();
+      if (!trimmed) return '';
+      return trimmed.startsWith('@') ? trimmed : `@${trimmed}`;
+    }
+
+    function randomChoice(items) {
+      return items[Math.floor(Math.random() * items.length)];
+    }
+
+    function buildIntroLine({ dateTime }) {
+      const selectedDate = dateTime ? new Date(dateTime) : null;
+      const valid = selectedDate && !Number.isNaN(selectedDate.getTime());
+      const weekday = valid ? selectedDate.toLocaleDateString([], { weekday: 'long' }) : 'ride';
+
+      const today = new Date();
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const sameDate = (a, b) => a.getFullYear() === b.getFullYear()
+        && a.getMonth() === b.getMonth()
+        && a.getDate() === b.getDate();
+
+      let timing = 'coming up';
+      if (valid && sameDate(selectedDate, today)) timing = 'TONIGHT';
+      else if (valid && sameDate(selectedDate, tomorrow)) timing = 'TOMORROW';
+
+      const intros = [
+        `:bike: Our ${weekday} ride is ${timing}! :checkered_flag:`,
+        `:bicyclist: Saddle up — the ${weekday} ride is ${timing}! :checkered_flag:`,
+        `:bike: Wheels up ${timing} for our ${weekday} ride! :dash:`,
+        `:zap: ${weekday} ride time — we're rolling ${timing}! :bike:`,
+        `:sunny: Get those bikes ready — our ${weekday} ride is ${timing}! :bike:`,
+        `:checkered_flag: The ${weekday} group ride is ${timing} — see you out there! :bicyclist:`
+      ];
+      return randomChoice(intros);
+    }
+
+    function clockEmojiForDateTime(value) {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return ':clock6:';
+      let hour = date.getHours() % 12;
+      if (hour === 0) hour = 12;
+      const minutes = date.getMinutes();
+      return minutes >= 15 && minutes < 45 ? `:clock${hour}30:` : `:clock${minutes >= 45 ? (hour % 12) + 1 : hour}:`;
+    }
+
+    async function getCoordinates(location) {
+      const raw = String(location || '').trim();
+      const coordinateMatch = raw.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$/);
+      if (coordinateMatch) {
+        const latitude = Number(coordinateMatch[1]);
+        const longitude = Number(coordinateMatch[2]);
+        if (latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180) {
+          return { latitude, longitude };
+        }
+      }
+      return { latitude: 40.4259, longitude: -86.9081 };
+    }
+
+    function weatherCodeToText(code) {
+      if (code === 0) return { emoji: ':sunny:', text: 'Sunny' };
+      if (code === 1 || code === 2) return { emoji: ':partly_sunny:', text: 'Partly Cloudy' };
+      if (code === 3) return { emoji: ':cloud:', text: 'Cloudy' };
+      if ([45, 48].includes(code)) return { emoji: ':fog:', text: 'Foggy' };
+      if ([51, 53, 55, 56, 57].includes(code)) return { emoji: ':cloud_with_rain:', text: 'Drizzle' };
+      if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return { emoji: ':rain_cloud:', text: 'Rain' };
+      if ([71, 73, 75, 77, 85, 86].includes(code)) return { emoji: ':snowflake:', text: 'Snow' };
+      if ([95, 96, 99].includes(code)) return { emoji: ':thunder_cloud_and_rain:', text: 'Thunderstorms' };
+      return { emoji: ':partly_sunny:', text: 'Mixed Conditions' };
+    }
+
+    function degreesToCompass(degrees) {
+      if (!Number.isFinite(Number(degrees))) return '';
+      const dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+      const normalized = ((Number(degrees) % 360) + 360) % 360;
+      return dirs[Math.round(normalized / 22.5) % 16];
+    }
+
+    function selectedLocalParts(dateTime) {
+      const match = String(dateTime || '').match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
+      if (!match) return null;
+      return { date: match[1], hour: Number(match[2]), minute: Number(match[3]) };
+    }
+
+    async function fetchWeatherSummary(location, dateTime) {
+      const selected = selectedLocalParts(dateTime);
+      if (!selected) return { summary: '[weather unavailable: invalid date/time]', temperatureF: null };
+
+      try {
+        const coordinates = await getCoordinates(location);
+        const params = new URLSearchParams({
+          latitude: String(coordinates.latitude),
+          longitude: String(coordinates.longitude),
+          hourly: 'temperature_2m,weather_code,wind_speed_10m,wind_direction_10m',
+          temperature_unit: 'fahrenheit',
+          wind_speed_unit: 'mph',
+          timezone: 'America/Indiana/Indianapolis',
+          start_date: selected.date,
+          end_date: selected.date
+        });
+
+        const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`, {
+          cache: 'no-store',
+          headers: { Accept: 'application/json' }
+        });
+        const responseText = await response.text();
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = JSON.parse(responseText);
+        const hourly = data.hourly;
+        if (!hourly?.time?.length) throw new Error('API returned no hourly weather data');
+
+        const targetMinutes = selected.hour * 60 + selected.minute;
+        let bestIndex = 0;
+        let bestDiff = Infinity;
+        hourly.time.forEach((timeString, index) => {
+          const match = String(timeString).match(/T(\d{2}):(\d{2})/);
+          if (!match) return;
+          const minutes = Number(match[1]) * 60 + Number(match[2]);
+          const diff = Math.abs(minutes - targetMinutes);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestIndex = index;
+          }
+        });
+
+        const tempF = Math.round(Number(hourly.temperature_2m?.[bestIndex]));
+        const windMph = Math.round(Number(hourly.wind_speed_10m?.[bestIndex]));
+        const windDir = degreesToCompass(hourly.wind_direction_10m?.[bestIndex]);
+        const condition = weatherCodeToText(Number(hourly.weather_code?.[bestIndex]));
+
+        if (!Number.isFinite(tempF) || !Number.isFinite(windMph)) throw new Error('Incomplete weather data');
+
+        return {
+          summary: `${condition.emoji} ${tempF}°F, ${condition.text}  :wind_blowing_face: ${windMph} mph ${windDir}`,
+          temperatureF: tempF
+        };
+      } catch (error) {
+        console.error('Weather fetch error:', error);
+        return { summary: `:warning: Weather unavailable (${error.message || 'error'})`, temperatureF: null };
+      }
+    }
+
+    function buildWhatToBringLine({ temperatureF }) {
+      const normal = [
+        ':toolbox: What to bring: A working bike :bike:, water :droplet:, and nutrition :cookie:.',
+        ':toolbox: Bring along: Your bike :bike:, plenty of water :droplet:, and something to snack on :cookie:.',
+        ':banana: Fuel up: Bring water :droplet:, some ride nutrition, and a bike ready to roll :bike:.',
+        ':cookie: Ride essentials: Water, a snack or two, and a working bike :bike:.',
+        ':droplet: Do not forget: Water, nutrition, and a bike with brakes, gears, and pumped tires :bike:.',
+        ':toolbox: Come prepared: A ready-to-ride bike :bike:, hydration :droplet:, and fuel for the road :cookie:.'
+      ];
+
+      const hot = [
+        ':sunny: Hot ride essentials: A working bike :bike:, two bottles :droplet:, nutrition :cookie:, and sunscreen.',
+        ':hot_face: It will be warm — bring extra water :droplet:, ride fuel :banana:, sunscreen, and a ready bike :bike:.',
+        ':droplet: Hydrate! Two bottles, something to snack on :cookie:, sunscreen :sunny:, and your bike :bike:.',
+        ':sunny: Bring plenty of water :droplet:, nutrition, sunscreen, and a bike ready to roll :bike:.',
+        ':banana: Fuel and hydrate for the heat: extra water :droplet:, snacks, sunscreen, and your bike :bike:.',
+        ':toolbox: Come heat-ready: Two bottles :droplet:, nutrition :cookie:, sunscreen :sunny:, and a working bike.'
+      ];
+
+      const cold = [
+        ':snowflake: Cold ride essentials: A working bike :bike:, water :droplet:, nutrition :cookie:, gloves, and warm layers :coat:.',
+        ':coat: Bundle up — bring warm layers, gloves, water :droplet:, a snack :cookie:, and your bike :bike:.',
+        ':gloves: It will be chilly: gloves, layers :coat:, water, ride fuel, and a ready bike :bike:.',
+        ':snowflake: Bring something warm to wear :coat:, something to snack on :cookie:, water :droplet:, and your bike.',
+        ':toolbox: Come cold-ready: Layers :coat:, gloves, hydration :droplet:, nutrition, and a working bike :bike:.',
+        ':bike: Cold-weather kit recommended — layers :coat:, gloves, water :droplet:, and enough fuel for the ride :banana:.'
+      ];
+
+      if (typeof temperatureF === 'number' && temperatureF > 80) return randomChoice(hot);
+      if (typeof temperatureF === 'number' && temperatureF < 55) return randomChoice(cold);
+      return randomChoice(normal);
+    }
+
+    function buildClosingLine() {
+      return randomChoice([
+        ':raised_hands: Please react if you plan to attend!',
+        ':white_check_mark: Drop a reaction if you are joining us!',
+        ':bike: React below so we know who is rolling with us!',
+        ':wave: Give this message a reaction if we will see you there!',
+        ':eyes: Planning to ride? React so the leaders know!',
+        ':checkered_flag: React if you are in — see you at the meetup!'
+      ]);
+    }
+
+    function buildRoutesSection({ paces, routeValues }) {
+      const paceList = parseCommaSeparated(paces);
+      const routes = routeValues.map((r) => r.trim()).filter(Boolean);
+      if (paceList.length <= 1) return `:world_map: Route: ${routes[0] || '[route]'}`;
+      return [':world_map: Routes:', ...paceList.map((pace, i) => `• ${pace}: ${routes[i] || routes[routes.length - 1] || `[route ${i + 1}]`}`)].join('\n');
+    }
+
+    function makeSlackPlainText(text) {
+      // Prevent Slack's "text contains markup" prompt from our template formatting.
+      // Preserve Slack emoji shortcodes (:bike:, :clock6:, etc.) and URLs.
+      return String(text)
+        .replace(/\*+/g, '')
+        .replace(/`+/g, '')
+        .replace(/^>\s?/gm, '');
+    }
+
+    async function buildAnnouncementTemplate({ location, dateTime, fullMessage }) {
+      const weatherData = await fetchWeatherSummary(location, dateTime);
+      const whenText = formatReadableDate(dateTime);
+      const whereText = location || DEFAULT_LOCATION;
+      const paceTextRaw = paceInput.value.trim() || DEFAULT_PACE;
+      const paceText = parseCommaSeparated(paceTextRaw).join(', ') || DEFAULT_PACE;
+      const leaders = getFieldValues(leaderFieldsContainer).map(normalizeLeaderTag).filter(Boolean);
+      const routesSection = buildRoutesSection({ paces: paceTextRaw, routeValues: getFieldValues(routeFieldsContainer) });
+      const clockEmoji = clockEmojiForDateTime(dateTime);
+
+      // These lines are deliberately deterministic. The compact mode outputs only this block.
+      const dataSections = [
+        `:zap: Pace: ${paceText}`
+      ];
+      if (leaders.length > 1) dataSections.push(`:busts_in_silhouette: Ride Leaders: ${leaders.join(', ')}`);
+      dataSections.push(
+        routesSection,
+        `${clockEmoji} Meetup: ${whenText}`,
+        `:round_pushpin: Where: ${whereText}`,
+        `:thermometer: Weather: ${weatherData.summary}`
+      );
+
+      if (!fullMessage) return makeSlackPlainText(dataSections.join('\n'));
+
+      return makeSlackPlainText([
+        buildIntroLine({ dateTime }),
+        '',
+        ...dataSections,
+        '',
+        buildWhatToBringLine({ temperatureF: weatherData.temperatureF }),
+        '',
+        buildClosingLine()
+      ].join('\n'));
+    }
+
+    useLocationBtn.addEventListener('click', () => {
+      if (!navigator.geolocation) {
+        output.value = 'Geolocation is not supported by your browser.';
+        return;
+      }
+
+      useLocationBtn.disabled = true;
+      useLocationBtn.textContent = 'Locating...';
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          locationInput.value = `${position.coords.latitude.toFixed(4)},${position.coords.longitude.toFixed(4)}`;
+          useLocationBtn.disabled = false;
+          useLocationBtn.textContent = 'Use My Location';
+          saveState();
+        },
+        () => {
+          output.value = 'Could not get your location. Enter a place name or lat,lon manually.';
+          useLocationBtn.disabled = false;
+          useLocationBtn.textContent = 'Use My Location';
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      );
     });
 
-    defaultToTodayAtSixPM();
+    generateBtn.addEventListener('click', async () => {
+      generateBtn.disabled = true;
+      generateBtn.textContent = 'Generating...';
+      output.value = 'Generating announcement...';
+      try {
+        output.value = await buildAnnouncementTemplate({
+          location: locationInput.value.trim(),
+          dateTime: rideDateTimeInput.value,
+          fullMessage: fullMessageInput.checked
+        });
+        saveState();
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.textContent = 'Generate Announcement';
+      }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      output.value = '';
+      saveState();
+    });
+
+    paceInput.addEventListener('input', () => {
+      syncFieldsToPaces();
+      saveState();
+    });
+    locationInput.addEventListener('input', saveState);
+    leaderFieldsContainer.addEventListener('input', saveState);
+    routeFieldsContainer.addEventListener('input', saveState);
+    fullMessageInput.addEventListener('change', saveState);
+
+    loadState();
   </script>
 </body>
+
 </html>
